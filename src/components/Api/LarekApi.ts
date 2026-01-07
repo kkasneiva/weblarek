@@ -14,6 +14,6 @@ export class LarekApi {
     }
 
     postOrder(data: OrderRequest): Promise<OrderResponse> {
-        return this.api.post<OrderResponse>('order/', data);
+        return this.api.post<OrderResponse>('order', data);
     }
 }

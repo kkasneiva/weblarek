@@ -69,4 +69,3 @@ larekApi.getProducts()
     .catch((err) => {
         console.error('Ошибка при загрузке каталога с сервера:', err);
     });
-
