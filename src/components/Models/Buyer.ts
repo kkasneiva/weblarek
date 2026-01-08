@@ -1,4 +1,5 @@
 import type { IBuyer, TPayment, ValidationErrors } from '../../types';
+import type { IEvents } from '../base/Events';
 
 export class Buyer {
     private payment: TPayment | null = null;
@@ -6,11 +7,31 @@ export class Buyer {
     private phone = '';
     private address = '';
 
+    constructor(private events?: IEvents) {}
+
     setData(data: Partial<IBuyer>): void {
-        if (data.payment !== undefined) this.payment = data.payment;
-        if (data.email !== undefined) this.email = data.email;
-        if (data.phone !== undefined) this.phone = data.phone;
-        if (data.address !== undefined) this.address = data.address;
+        let changed = false;
+
+        if (data.payment !== undefined && data.payment !== this.payment) {
+            this.payment = data.payment;
+            changed = true;
+        }
+        if (data.email !== undefined && data.email !== this.email) {
+            this.email = data.email;
+            changed = true;
+        }
+        if (data.phone !== undefined && data.phone !== this.phone) {
+            this.phone = data.phone;
+            changed = true;
+        }
+        if (data.address !== undefined && data.address !== this.address) {
+            this.address = data.address;
+            changed = true;
+        }
+
+        if (changed) {
+            this.events?.emit('buyer:changed');
+        }
     }
 
     getData(): IBuyer {
@@ -23,11 +44,15 @@ export class Buyer {
     }
 
     clear(): void {
+        const hadData =
+            this.payment !== null || this.email !== '' || this.phone !== '' || this.address !== '';
         this.payment = null;
         this.email = '';
         this.phone = '';
         this.address = '';
+        if (hadData) this.events?.emit('buyer:changed');
     }
+
 
     validate(): ValidationErrors<IBuyer> {
         const errors: ValidationErrors<IBuyer> = {};
