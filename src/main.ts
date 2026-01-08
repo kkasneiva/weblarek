@@ -31,24 +31,22 @@ const getImageUrl = (image: string) => {
   return `${CDN_URL}/${image}`;
 };
 
-// Валидация 
-function validateOrderStep(data: { payment: TPayment | null; address: string }) {
-  const errors: string[] = [];
-  if (!data.payment) errors.push('Не выбран вид оплаты');
-  if (!data.address.trim()) errors.push('Введите адрес доставки');
-  return {
-    valid: errors.length === 0,
-    errors: errors.join('. '),
-  };
-}
+import type { IBuyer, ValidationErrors } from './types';
 
-function validateContactsStep(data: { email: string; phone: string }) {
-  const errors: string[] = [];
-  if (!data.email.trim()) errors.push('Укажите email');
-  if (!data.phone.trim()) errors.push('Укажите телефон');
+const ORDER_STEP_FIELDS: Array<keyof IBuyer> = ['payment', 'address'];
+const CONTACTS_STEP_FIELDS: Array<keyof IBuyer> = ['email', 'phone'];
+
+function getStepValidation(
+  errors: ValidationErrors<IBuyer>,
+  fields: Array<keyof IBuyer>
+): { valid: boolean; errorsText: string } {
+  const messages = fields
+    .map((f) => errors[f])
+    .filter((v): v is string => Boolean(v));
+
   return {
-    valid: errors.length === 0,
-    errors: errors.join('. '),
+    valid: messages.length === 0,
+    errorsText: messages.join('. '),
   };
 }
 
@@ -75,16 +73,6 @@ const contactsForm = new ContactsForm(events, cloneTemplate('#contacts'));
 const successView = new Success(events, cloneTemplate('#success'));
 
 let orderStep: 1 | 2 = 1;
-
-let draftOrder = {
-  payment: null as TPayment | null,
-  address: '',
-};
-
-let draftContacts = {
-  email: '',
-  phone: '',
-};
 
 events.on('catalog:changed', () => {
   const items = productsModel.getItems();
@@ -137,9 +125,6 @@ events.on('cart:changed', () => {
   header.render({ counter: cartModel.getCount() });
 });
 
-events.on('buyer:changed', () => {
-});
-
 events.on('basket:open', () => {
   renderBasketModal();
 });
@@ -168,18 +153,19 @@ events.on<IProduct>('basket:item:remove', (item) => {
 events.on('order:open', () => {
   orderStep = 1;
 
-  draftOrder = { payment: null, address: '' };
-  draftContacts = { email: '', phone: '' };
+  buyerModel.clear();
 
-  const v = validateOrderStep(draftOrder);
+  const buyer = buyerModel.getData();
+  const errors = buyerModel.validate();
+  const step = getStepValidation(errors, ORDER_STEP_FIELDS);
 
   modal.open();
   modal.render({
     content: orderForm.render({
-      valid: v.valid,
-      errors: v.errors,
-      payment: draftOrder.payment,
-      address: draftOrder.address,
+      valid: step.valid,
+      errors: step.errorsText,
+      payment: buyer.payment,
+      address: buyer.address,
     }),
   });
 });
@@ -187,78 +173,89 @@ events.on('order:open', () => {
 // изменения в форме заказа
 events.on<{ field: string; value: unknown }>('order:change', ({ field, value }) => {
   if (field === 'payment') {
-    draftOrder.payment = value as TPayment;
+    buyerModel.setData({ payment: value as TPayment });
   }
 
   if (field === 'address') {
-    draftOrder.address = String(value ?? '');
+    buyerModel.setData({ address: String(value ?? '') });
   }
 
-  const v = validateOrderStep(draftOrder);
+  const buyer = buyerModel.getData();
+  const errors = buyerModel.validate();
+  const step = getStepValidation(errors, ORDER_STEP_FIELDS);
+
   orderForm.render({
-    valid: v.valid,
-    errors: v.errors,
-    payment: draftOrder.payment,
-    address: draftOrder.address,
+    valid: step.valid,
+    errors: step.errorsText,
+    payment: buyer.payment,
+    address: buyer.address,
   });
 });
 
 events.on('order:submit', () => {
-  const v = validateOrderStep(draftOrder);
-  if (!v.valid) {
-    orderForm.render({ valid: false, errors: v.errors });
+  const buyer = buyerModel.getData();
+  const errors = buyerModel.validate();
+  const step = getStepValidation(errors, ORDER_STEP_FIELDS);
+
+  if (!step.valid) {
+    orderForm.render({
+      valid: false,
+      errors: step.errorsText,
+      payment: buyer.payment,
+      address: buyer.address,
+    });
     return;
   }
 
-  buyerModel.setData({
-    payment: draftOrder.payment,
-    address: draftOrder.address,
-  });
-
   orderStep = 2;
 
-  const v2 = validateContactsStep(draftContacts);
+  const contactsErrors = buyerModel.validate();
+  const contactsStep = getStepValidation(contactsErrors, CONTACTS_STEP_FIELDS);
+
   modal.render({
     content: contactsForm.render({
-      valid: v2.valid,
-      errors: v2.errors,
-      email: draftContacts.email,
-      phone: draftContacts.phone,
+      valid: contactsStep.valid,
+      errors: contactsStep.errorsText,
+      email: buyer.email,
+      phone: buyer.phone,
     }),
   });
 });
 
 // изменения в контактах
 events.on<{ field: string; value: unknown }>('contacts:change', ({ field, value }) => {
-  if (field === 'email') draftContacts.email = String(value ?? '');
-  if (field === 'phone') draftContacts.phone = String(value ?? '');
+  if (field === 'email') buyerModel.setData({ email: String(value ?? '') });
+  if (field === 'phone') buyerModel.setData({ phone: String(value ?? '') });
 
-  const v = validateContactsStep(draftContacts);
+  const buyer = buyerModel.getData();
+  const errors = buyerModel.validate();
+  const step = getStepValidation(errors, CONTACTS_STEP_FIELDS);
+
   contactsForm.render({
-    valid: v.valid,
-    errors: v.errors,
-    email: draftContacts.email,
-    phone: draftContacts.phone,
+    valid: step.valid,
+    errors: step.errorsText,
+    email: buyer.email,
+    phone: buyer.phone,
   });
 });
 
 events.on('contacts:submit', () => {
-  const v = validateContactsStep(draftContacts);
-  if (!v.valid) {
-    contactsForm.render({ valid: false, errors: v.errors });
+  const buyer = buyerModel.getData();
+  const errors = buyerModel.validate();
+  const step = getStepValidation(errors, CONTACTS_STEP_FIELDS);
+
+  if (!step.valid) {
+    contactsForm.render({
+      valid: false,
+      errors: step.errorsText,
+      email: buyer.email,
+      phone: buyer.phone,
+    });
     return;
   }
 
-  buyerModel.setData({
-    email: draftContacts.email,
-    phone: draftContacts.phone,
-  });
-
-  const buyer = buyerModel.getData();
-
   const items = cartModel.getItems().map((p) => p.id);
   const total = cartModel.getTotal();
-
   if (items.length === 0) return;
 
   larekApi.postOrder({
@@ -320,7 +317,7 @@ function renderBasketModal() {
     content: basketView.render({
       items: cards,
       total,
-      selected: canOrder,
+      canOrder,
     }),
   });
 }

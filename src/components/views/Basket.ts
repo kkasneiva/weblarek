@@ -5,7 +5,7 @@ import { ensureElement } from '../../utils/utils';
 interface BasketData {
     items: HTMLElement[];
     total: number;
-    selected: boolean; // можно ли оформлять (есть товары)
+    canOrder: boolean;
 }
 
 export class Basket extends Component<BasketData> {
@@ -29,17 +29,17 @@ export class Basket extends Component<BasketData> {
 
     set items(value: HTMLElement[]) {
         if (value.length === 0) {
-            this.listElement.textContent = 'Корзина пуста';
-        } else {
-            this.listElement.replaceChildren(...value);
+            this.listElement.replaceChildren();
+            return;
         }
+        this.listElement.replaceChildren(...value);
     }
 
     set total(value: number) {
         this.totalElement.textContent = `${value} синапсов`;
     }
 
-    set selected(value: boolean) {
+    set canOrder(value: boolean) {
         this.buttonElement.disabled = !value;
     }
 }
